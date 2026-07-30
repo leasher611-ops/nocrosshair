@@ -1,0 +1,18 @@
+{
+    "controller_id": "xbox360",
+    "polling_rate_hz": 125,
+    "trigger_mode": "digital",
+    "trigger_stop_position": null,
+    "rapid_trigger": false,
+    "joystick_response_curve": "linear",
+    "rgb_color": null,
+    "rgb_effect": null,
+    "rgb_brightness": null,
+    "gyro_enabled": false,
+    "calibration": {
+        "ls_center_x": 0,
+        "ls_center_y": 0,
+        "rs_center_x": 0,
+        "rs_center_y": 0
+    }
+}

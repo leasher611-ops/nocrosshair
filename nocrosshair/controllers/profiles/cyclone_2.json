@@ -1,0 +1,24 @@
+{
+    "controller_id": "cyclone_2",
+    "polling_rate_hz": 1000,
+    "trigger_mode": "hybrid",
+    "trigger_stop_position": 0.85,
+    "rapid_trigger": true,
+    "joystick_response_curve": "linear",
+    "rgb_color": [0, 255, 136],
+    "rgb_effect": "static",
+    "rgb_brightness": 128,
+    "gyro_enabled": true,
+    "gyro_sensitivity": 1.0,
+    "gyro_aim_mode": "relative",
+    "motion_aim": true,
+    "calibration": {
+        "ls_center_x": 0,
+        "ls_center_y": 0,
+        "rs_center_x": 0,
+        "rs_center_y": 0,
+        "gyro_offset_x": 0,
+        "gyro_offset_y": 0,
+        "gyro_offset_z": 0
+    }
+}
