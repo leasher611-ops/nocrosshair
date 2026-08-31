@@ -101,5 +101,13 @@ Por favor, responda com o máximo de detalhes técnicos possível, incluindo val
 
 ---
 
-*Código fonte: https://github.com/nocrosshair/nocrosshair (em desenvolvimento)*
-*Plataforma: Linux, Python 3.10+, Xbox Cloud Gaming (xCloud)*
+*Código fonte: https://github.com/leasher611-ops/nocrosshair (público)*
+*Branch: master*
+*Arquivos principais:*
+- `nocrosshair/features/aim_layers.py` — as 5 camadas
+- `nocrosshair/features/silent_aim_qt.py` — Silent Aim/Hit + Quick Tune
+- `nocrosshair/features/aim_assist.py` — pipeline antigo + presets (fn_luna_style)
+- `nocrosshair/core/input_loop.py` — integração das layers no flush
+- `nocrosshair/core/config.py` — configurações do aim assist
+- `docs/RESEARCH_AIM.md` — pesquisa técnica completa
+- `Plataforma: Linux, Python 3.10+, Xbox Cloud Gaming (xCloud)*
