@@ -27,3 +27,8 @@ Thumbs.db
 .pytest_cache/
 StickyTrackerAI v0.0.5/
 StickyTrackerAI v0.0.5.zip
+
+# Large files
+*.zip
+*.tar.gz
+*.7z
