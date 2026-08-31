@@ -48,9 +48,9 @@ class CrosshairPreview(QWidget):
         cx = w // 2
         cy = h // 2
 
-        painter.fillRect(0, 0, w, h, QColor(6, 8, 10))
+        painter.fillRect(0, 0, w, h, QColor(12, 26, 46))
 
-        pen = QPen(QColor(18, 30, 22))
+        pen = QPen(QColor(37, 51, 79))
         pen.setWidth(1)
         painter.setPen(pen)
 
@@ -59,7 +59,7 @@ class CrosshairPreview(QWidget):
         for i in range(0, h, 20):
             painter.drawLine(0, i, w, i)
 
-        pen2 = QPen(QColor(12, 22, 16))
+        pen2 = QPen(QColor(18, 38, 60))
         pen2.setWidth(1)
         painter.setPen(pen2)
         painter.drawLine(cx, 0, cx, h)
@@ -82,15 +82,15 @@ class CrosshairPreview(QWidget):
 
         self._draw_cross(painter, cx, cy, cross_type, size, thick, gap, color)
 
-        circle_pen = QPen(QColor(20, 40, 30, 80))
+        circle_pen = QPen(QColor(20, 40, 60, 80))
         circle_pen.setWidth(1)
         painter.setPen(circle_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawEllipse(cx - size - gap, cy - size - gap, 2 * (size + gap), 2 * (size + gap))
 
-        font = QFont("JetBrains Mono", 7)
+        font = QFont("Consolas", 7)
         painter.setFont(font)
-        painter.setPen(QColor(60, 80, 70))
+        painter.setPen(QColor(96, 115, 100))
         painter.drawText(6, h - 6, f"W:{w} H:{h}")
 
     def _draw_cross(self, painter, cx, cy, cross_type, size, thick, gap, color):

@@ -109,11 +109,29 @@ class RapidFireEngine:
         """Versão alternativa que calcula hold/release a partir de speed (Hz).
 
         Se speed = 50 Hz -> 1 ciclo = 20ms -> hold=10ms, release=10ms
+
+        Modos (universal/pistol/shotgun/custom) ajustam speed e hold_ratio:
+        - universal: release curto (~25% do ciclo) para não stutterar full-auto
+          enquanto semi-autos disparam no teto.
+        - pistol: mais Hz (semi-auto rápida).
+        - shotgun: mais lento, hold dominante.
         """
+        mode = getattr(self.config, "mode", "universal")
+        if mode == "pistol":
+            self.config.speed = max(self.config.speed, 70)
+            ratio = 0.60
+        elif mode == "shotgun":
+            self.config.speed = min(self.config.speed, 30)
+            ratio = 0.75
+        elif mode == "custom":
+            ratio = max(0.30, min(0.95, self.config.hold_ratio))
+        else:  # universal
+            ratio = max(0.30, min(0.95, self.config.hold_ratio))
+
         if self.config.speed > 0:
             cycle_ms = 1000.0 / self.config.speed
-            self.config.hold_ms = int(cycle_ms / 2)
-            self.config.release_ms = int(cycle_ms / 2)
+            self.config.hold_ms = max(1, int(cycle_ms * ratio))
+            self.config.release_ms = max(1, int(cycle_ms * (1.0 - ratio)))
         return self.process(rt_raw, is_trigger_held, delta_ms)
 
     def get_stats(self) -> dict:

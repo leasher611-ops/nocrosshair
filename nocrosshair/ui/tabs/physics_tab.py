@@ -131,7 +131,7 @@ class PhysicsTab(QWidget):
         test_layout.addLayout(visual_layout)
 
         output_label = QLabel("Output: 0, 0")
-        output_label.setStyleSheet("color: #00ff88")
+        output_label.setStyleSheet("color: #00E5FF; font-weight: 500;")
         test_layout.addWidget(output_label)
 
         test_group.layout().addLayout(test_layout)

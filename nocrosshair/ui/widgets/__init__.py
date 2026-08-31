@@ -112,15 +112,15 @@ class StickVisualizerWidget(QWidget):
         cx = w // 2
         cy = (h - 20) // 2 + 5
 
-        painter.setPen(QPen(QColor("#ffffff")))
-        painter.setFont(QFont("monospace", 8))
+        painter.setPen(QPen(QColor("#4a638c")))
+        painter.setFont(QFont("Consolas", 8))
         painter.drawText(5, 12, self.title)
 
-        painter.setBrush(QBrush(QColor("#1a1a2e")))
-        painter.setPen(QPen(QColor("#444444")))
+        painter.setBrush(QBrush(QColor("#15263c")))
+        painter.setPen(QPen(QColor("#4a638c")))
         painter.drawEllipse(cx - r, cy - r, 2 * r, 2 * r)
 
-        painter.setPen(QPen(QColor("#333333")))
+        painter.setPen(QPen(QColor("#3a4a63")))
         painter.drawLine(cx - r, cy, cx + r, cy)
         painter.drawLine(cx, cy - r, cx, cy + r)
 
@@ -129,8 +129,8 @@ class StickVisualizerWidget(QWidget):
         dot_x = cx + int(nx * r)
         dot_y = cy - int(ny * r)
 
-        painter.setBrush(QBrush(QColor("#00ff88")))
-        painter.setPen(QPen(QColor("#00cc66")))
+        painter.setBrush(QBrush(QColor("#00E5FF")))
+        painter.setPen(QPen(QColor("#00B8D4")))
         painter.drawEllipse(dot_x - 5, dot_y - 5, 10, 10)
 
 class ResponseCurveWidget(QWidget):
@@ -156,24 +156,24 @@ class ResponseCurveWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         w, h = self.width(), self.height()
-        painter.fillRect(0, 0, w, h, QColor("#1a1a2e"))
+        painter.fillRect(0, 0, w, h, QColor(18, 26, 46))
 
-        pad = 20
+        pad = 24
         gw = w - 2 * pad
         gh = h - 2 * pad
 
-        painter.setPen(QPen(QColor("#333333")))
+        painter.setPen(QPen(QColor("#25334F")))
         for i in range(1, 4):
             x = pad + int(gw * i / 4)
             y = pad + int(gh * i / 4)
             painter.drawLine(x, pad, x, h - pad)
             painter.drawLine(pad, y, w - pad, y)
 
-        painter.setPen(QPen(QColor("#666666")))
+        painter.setPen(QPen(QColor("#4a638c")))
         painter.drawLine(pad, h - pad, w - pad, h - pad)
         painter.drawLine(pad, pad, pad, h - pad)
 
-        painter.setPen(QPen(QColor("#00ff88"), 2))
+        painter.setPen(QPen(QColor("#00E5FF"), 2))
         prev_pt = None
 
         for i in range(101):

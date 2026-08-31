@@ -266,9 +266,10 @@ class TestControllerTypeNormalization:
         from nocrosshair.core.controller import _normalize_type
         assert _normalize_type("dualshock4") == "ds4"
 
-    def test_dualsense_edge_normalizes_to_ds4(self):
+    def test_dualsense_edge_uses_dualsense_layout(self):
         from nocrosshair.core.controller import _normalize_type
-        assert _normalize_type("dualsense_edge") == "ds4"
+        # DualSense NÃO é DS4: layout de eixos é o do Xbox (stick dir em RX/RY)
+        assert _normalize_type("dualsense_edge") == "dualsense_edge"
 
     def test_xbox360_stays_xbox360(self):
         from nocrosshair.core.controller import _normalize_type
@@ -278,32 +279,118 @@ class TestControllerTypeNormalization:
 class TestDS4Translation:
 
     def test_ds4_button_map(self):
-        from nocrosshair.core.input_loop import DS4_BUTTON_MAP, _is_ds4_controller
-        assert DS4_BUTTON_MAP[0x130] == e.BTN_A
-        assert DS4_BUTTON_MAP[0x131] == e.BTN_B
-        assert DS4_BUTTON_MAP[0x132] == e.BTN_X
-        assert DS4_BUTTON_MAP[0x133] == e.BTN_Y
-        assert DS4_BUTTON_MAP[0x134] == e.BTN_TL
-        assert DS4_BUTTON_MAP[0x135] == e.BTN_TR
+        from nocrosshair.core.input_loop import DS4_BUTTON_MAP
+        # hid-playstation reporta códigos posicionais; o virtual é Xbox 360,
+        # onde o jogo lê BTN_X(307)=Quadrado e BTN_Y(308)=Triângulo.
+        assert DS4_BUTTON_MAP[0x130] == e.BTN_A     # Cross (baixo) -> A do Xbox
+        assert DS4_BUTTON_MAP[0x131] == e.BTN_B     # Circle (direita) -> B do Xbox
+        assert DS4_BUTTON_MAP[0x133] == e.BTN_Y     # Triangle (cima) -> Y do Xbox
+        assert DS4_BUTTON_MAP[0x134] == e.BTN_X     # Square (esquerda) -> X do Xbox
+        assert DS4_BUTTON_MAP[0x136] == e.BTN_TL    # L1
+        assert DS4_BUTTON_MAP[0x137] == e.BTN_TR    # R1
+        assert DS4_BUTTON_MAP[0x138] == e.BTN_TL2   # L2 digital
+        assert DS4_BUTTON_MAP[0x139] == e.BTN_TR2   # R2 digital
+        assert DS4_BUTTON_MAP[0x13a] == e.BTN_SELECT  # Create/Share
+        assert DS4_BUTTON_MAP[0x13b] == e.BTN_START   # Options
+        assert DS4_BUTTON_MAP[0x13c] == e.BTN_MODE    # PS Home
+        assert DS4_BUTTON_MAP[0x13d] == e.BTN_THUMBL  # L3
+        assert DS4_BUTTON_MAP[0x13e] == e.BTN_THUMBR  # R3
+        # Códigos inexistentes/duplicados não devem estar na tabela.
+        assert 0x132 not in DS4_BUTTON_MAP  # BTN_C (unused)
+        assert 0x135 not in DS4_BUTTON_MAP  # BTN_Z (unused)
 
-    def test_is_ds4_controller_detection(self):
-        from nocrosshair.core.input_loop import _is_ds4_controller
+    def test_sony_stick_cluster_swap(self):
+        """O kernel enumera os botões do relatório na ordem NUMÉRICA dos
+        códigos evdev (0x13A..0x13E), mas o jogo lê o DS4 na ordem física
+        (Share, Options, L3, R3, PS). Sem a rotação, o MODE(0x13C) cai no
+        slot do L3, o THUMBL(0x13D) no do R3 e o THUMBR(0x13E) no do PS —
+        Shift (correr) virava R3. A rotação reencaminha cada código para o
+        slot correto do jogo."""
+        from nocrosshair.core.controller import _map_button_for_output
+        assert _map_button_for_output("ds4", e.BTN_THUMBL) == e.BTN_MODE
+        assert _map_button_for_output("ds4", e.BTN_THUMBR) == e.BTN_THUMBL
+        assert _map_button_for_output("ds4", e.BTN_MODE) == e.BTN_THUMBR
+        # Face: HID DS4 = Quadrado, Cruz, Círculo, Triângulo (índices 0-3).
+        # Evdev enumera A,B,X,Y — a rotação manda cada letra Xbox pro slot HID.
+        assert _map_button_for_output("ds4", e.BTN_X) == e.BTN_A  # Quadrado → slot 0
+        assert _map_button_for_output("ds4", e.BTN_A) == e.BTN_B  # Cruz     → slot 1
+        assert _map_button_for_output("ds4", e.BTN_B) == e.BTN_X  # Círculo  → slot 2
+        assert _map_button_for_output("ds4", e.BTN_Y) == e.BTN_Y  # Triângulo já é slot 3
+        # No Xbox o wine mapeia por CÓDIGO evdev: identidade correta.
+        assert _map_button_for_output("xbox360", e.BTN_THUMBL) == e.BTN_THUMBL
+        assert _map_button_for_output("xbox360", e.BTN_THUMBR) == e.BTN_THUMBR
+        assert _map_button_for_output("xbox360", e.BTN_X) == e.BTN_X
+        assert _map_button_for_output("xbox360", e.BTN_B) == e.BTN_B
+
+    def test_ds4_kbd_face_buttons_land_on_hid_slots(self):
+        """Q deve ser Círculo e E/R Quadrado no DS4 virtual — não Cruz/Círculo."""
+        from nocrosshair.core.controller import _map_button_for_output
+        from nocrosshair.core.remapper import ACTION_MAP, DEFAULT_KBD_BINDINGS
+
+        def ds4_out(key: str) -> int:
+            action = DEFAULT_KBD_BINDINGS[key]
+            return _map_button_for_output("ds4", ACTION_MAP[action])
+
+        assert ds4_out("KEY_E") == e.BTN_A      # Quadrado (slot HID 0)
+        assert ds4_out("KEY_R") == e.BTN_A      # Quadrado
+        assert ds4_out("KEY_Q") == e.BTN_X      # Círculo  (slot HID 2)
+        assert ds4_out("KEY_SPACE") == e.BTN_B  # Cruz     (slot HID 1)
+        assert ds4_out("KEY_F") == e.BTN_Y      # Triângulo (slot HID 3)
+
+    def test_virtual_caps_include_trigger_buttons(self):
+        """TL2/TR2 precisam estar declarados — sem eles o índice dos botões
+        seguintes (Select/Start/L3/R3) desloca e o jogo lê tudo errado."""
+        from nocrosshair.core.controller import _make_capabilities
+        caps, vid, pid = _make_capabilities("ds4")
+        key_caps = caps.get(e.EV_KEY, [])
+        assert e.BTN_TL2 in key_caps
+        assert e.BTN_TR2 in key_caps
+        caps_xbox, _, _ = _make_capabilities("xbox360")
+        key_caps_xbox = caps_xbox.get(e.EV_KEY, [])
+        assert e.BTN_TL2 in key_caps_xbox
+        assert e.BTN_TR2 in key_caps_xbox
+
+    def test_sony_controller_detection(self):
+        from nocrosshair.core.input_loop import _detect_sony_kind
         class MockDevInfo:
             vendor = 0x054C
+            product = 0x09CC
         class MockDev:
             info = MockDevInfo()
             name = "Sony Interactive Entertainment Wireless Controller"
-            def capabilities(self):
-                return {e.EV_KEY: [e.BTN_A, e.BTN_C]}
-        
-        assert _is_ds4_controller(MockDev()) is True
-        
+
+        assert _detect_sony_kind(MockDev()) == "ds4"
+
+        class MockDualSenseInfo:
+            vendor = 0x054C
+            product = 0x0CE6
+        class MockDualSense:
+            info = MockDualSenseInfo()
+            name = "DualSense Wireless Controller"
+
+        assert _detect_sony_kind(MockDualSense()) == "dualsense"
+
         class MockXboxDevInfo:
             vendor = 0x045E
         class MockXboxDev:
             info = MockXboxDevInfo()
             name = "Microsoft Xbox 360 pad"
-            def capabilities(self):
-                return {e.EV_KEY: [e.BTN_A, e.BTN_B]}
 
-        assert _is_ds4_controller(MockXboxDev()) is False
+        assert _detect_sony_kind(MockXboxDev()) is None
+
+    def test_sony_axis_map(self):
+        """DS4 e DualSense têm layouts de eixo DIFERENTES — o mapa corrige."""
+        from nocrosshair.core.input_loop import map_sony_axis
+        # DS4: stick direito em ABS_Z/ABS_RZ, gatilhos em ABS_RX/ABS_RY
+        assert map_sony_axis("ds4", e.ABS_X, 128) == (e.ABS_X, 0)          # centro
+        assert map_sony_axis("ds4", e.ABS_X, 255)[1] > 30000               # full direito
+        assert map_sony_axis("ds4", e.ABS_X, 0)[1] <= -30000               # full esquerdo
+        assert map_sony_axis("ds4", e.ABS_Z, 255)[0] == e.ABS_RX           # stick dir X → canonical RX
+        assert map_sony_axis("ds4", e.ABS_RZ, 255)[0] == e.ABS_RY          # stick dir Y → canonical RY
+        assert map_sony_axis("ds4", e.ABS_RX, 200) == (e.ABS_Z, 200)       # L2 → canonical LT
+        assert map_sony_axis("ds4", e.ABS_RY, 180) == (e.ABS_RZ, 180)      # R2 → canonical RT
+        # DualSense: stick direito em ABS_RX/ABS_RY, gatilhos em ABS_Z/ABS_RZ
+        assert map_sony_axis("dualsense", e.ABS_RX, 255)[0] == e.ABS_RX
+        assert map_sony_axis("dualsense", e.ABS_Z, 180) == (e.ABS_Z, 180)  # L2 → canonical LT
+        # Eixo não mapeado (dpad) → None
+        assert map_sony_axis("ds4", e.ABS_HAT0X, 1) is None

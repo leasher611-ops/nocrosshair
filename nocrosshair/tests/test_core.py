@@ -187,30 +187,60 @@ class TestWeaponBinds:
 
     def test_default_kbd_bindings_has_weapon_keys(self):
         from nocrosshair.core.remapper import DEFAULT_KBD_BINDINGS
-        assert "KEY_1" in DEFAULT_KBD_BINDINGS
-        assert "KEY_2" in DEFAULT_KBD_BINDINGS
-        assert "KEY_3" in DEFAULT_KBD_BINDINGS
-        assert "KEY_4" in DEFAULT_KBD_BINDINGS
-        assert "KEY_5" in DEFAULT_KBD_BINDINGS
+        # 1-5 NÃO são remapeados: o jogo (KBM) recebe as teclas direto (slots).
+        for k in ("KEY_1", "KEY_2", "KEY_3", "KEY_4", "KEY_5"):
+            assert k not in DEFAULT_KBD_BINDINGS
         assert "KEY_F" in DEFAULT_KBD_BINDINGS
         assert "KEY_Q" in DEFAULT_KBD_BINDINGS
-        assert DEFAULT_KBD_BINDINGS["KEY_F"] == "BTN_Y"
-        assert DEFAULT_KBD_BINDINGS["KEY_Q"] == "BTN_B"
+        assert DEFAULT_KBD_BINDINGS["KEY_F"] == "BTN_Y"  # Picareta -> Triângulo (Y do Xbox)
+        assert DEFAULT_KBD_BINDINGS["KEY_Q"] == "BTN_B"  # Granada -> Círculo (B do Xbox)
 
     def test_process_key_normal(self):
         from nocrosshair.core.remapper import InputRemapper, DEFAULT_KBD_BINDINGS
         remapper = InputRemapper(DEFAULT_KBD_BINDINGS)
         action_e, val_e = remapper.process_key("KEY_E", 1)
-        assert action_e == "BTN_X"
+        assert action_e == "BTN_X"  # Coletar -> Quadrado (X do Xbox)
         assert val_e == 1
 
+        action_r, val_r = remapper.process_key("KEY_R", 1)
+        assert action_r == "BTN_X"  # Recarregar -> Quadrado (X do Xbox)
+        assert val_r == 1
+
+        action_c, val_c = remapper.process_key("KEY_C", 1)
+        assert action_c == "BTN_THUMBR"
+        assert val_c == 1
+
+        action_shift, val_shift = remapper.process_key("KEY_LEFTSHIFT", 1)
+        assert action_shift == "BTN_THUMBL"
+        assert val_shift == 1
+
+        action_space, val_space = remapper.process_key("KEY_SPACE", 1)
+        assert action_space == "BTN_A"  # Pular -> A do Xbox (Cruz)
+        assert val_space == 1
+
+        action_f, val_f = remapper.process_key("KEY_F", 1)
+        assert action_f == "BTN_Y"  # Picareta -> Triângulo (Y do Xbox)
+        assert val_f == 1
+
         action_q, val_q = remapper.process_key("KEY_Q", 1)
-        assert action_q == "BTN_B"
+        assert action_q == "BTN_B"  # Granada -> Círculo (B do Xbox)
         assert val_q == 1
 
+        action_tab, val_tab = remapper.process_key("KEY_TAB", 1)
+        assert action_tab == "ABS_HAT0Y"
+        assert val_tab == -32767
+
+        action_m, val_m = remapper.process_key("KEY_M", 1)
+        assert action_m == "BTN_SELECT"
+        assert val_m == 1
+
+        action_b, val_b = remapper.process_key("KEY_B", 1)
+        assert action_b == "ABS_HAT0Y"
+        assert val_b == 32767
+
         action_1, val_1 = remapper.process_key("KEY_1", 1)
-        assert action_1 == "BTN_TR"
-        assert val_1 == 1
+        assert action_1 is None  # 1-5 ficam como tecla (slot direto no KBM)
+        assert val_1 == 0
 
 
 if __name__ == "__main__":

@@ -1,1 +1,29 @@
-.vercel
+# Build
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+.vercel/
+.mimocode/
+.pytest_cache/
+StickyTrackerAI v0.0.5/
+StickyTrackerAI v0.0.5.zip

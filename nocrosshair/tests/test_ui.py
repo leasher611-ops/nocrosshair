@@ -110,6 +110,19 @@ def test_aa_tab():
     tab = AimAssistTab()
     assert tab is not None
 
+def test_aa_tab_restores_saved_config():
+    """Regressão: config salvo (com floats vindos do disco) não pode
+    crashar ao restaurar a UI (bindings int/float corretos)."""
+    from nocrosshair.ui.tabs.aa_tab import AimAssistTab
+
+    tab = AimAssistTab()
+    cfg = tab.get_config()
+    for key, val in cfg.items():
+        if isinstance(val, float):
+            cfg[key] = float(val)
+    tab.set_config(cfg)
+    assert tab.get_config()["aimlock_glue_drift_window_deg"] is not None
+
 def test_recoil_tab():
     from nocrosshair.ui.tabs.recoil_tab import RecoilTab
 

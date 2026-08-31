@@ -40,7 +40,8 @@ class RemappingTab(QWidget):
 
         self.bindings_table = KeyBindingTable()
         self.bindings_table.add_binding("KEY_SPACE", "BTN_A", "Normal")
-        self.bindings_table.add_binding("KEY_C", "BTN_B", "Normal")
+        self.bindings_table.add_binding("KEY_LEFTSHIFT", "BTN_THUMBL", "Normal")
+        self.bindings_table.add_binding("KEY_C", "BTN_THUMBR", "Normal")
         self.bindings_table.add_binding("KEY_E", "BTN_X", "Normal")
         bindings_layout.addWidget(self.bindings_table)
 

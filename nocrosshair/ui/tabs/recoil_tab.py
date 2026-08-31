@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 from nocrosshair.core.config import RECOIL_PRESETS, WEAPON_CATEGORIES
 from nocrosshair.features.recoil import RecoilEngine, RecoilTestbed
 from nocrosshair.ui.widgets import (
-    LabeledSlider, PresetSelector, ResponseCurveWidget, StickVisualizerWidget,
+    LabeledSlider, LabeledDoubleSlider, PresetSelector, ResponseCurveWidget, StickVisualizerWidget,
     HLine, SectionGroupBox, RecoilCurvePreview
 )
 
@@ -52,6 +52,27 @@ class RecoilTab(QWidget):
         self.weapon_selector.preset_changed.connect(self._apply_weapon_preset)
         weapon_layout.addWidget(self.weapon_selector)
 
+        slots_label = QLabel("Loadout Slots (auto-switch with F / 1-5 / Y / scroll)")
+        slots_label.setObjectName("hudSubLabel")
+        weapon_layout.addWidget(slots_label)
+
+        all_weapons = sorted(
+            RECOIL_PRESETS.keys(),
+            key=lambda w: (RECOIL_PRESETS[w].get("category", ""), w),
+        )
+        self.loadout_combos = []
+        for i in range(1, 6):
+            row = QHBoxLayout()
+            lbl = QLabel(f"Slot {i}")
+            lbl.setMinimumWidth(100)
+            row.addWidget(lbl)
+            combo = QComboBox()
+            combo.addItems(all_weapons)
+            combo.currentTextChanged.connect(self._on_config_change)
+            row.addWidget(combo)
+            weapon_layout.addLayout(row)
+            self.loadout_combos.append(combo)
+
         btn_row = QHBoxLayout()
         self.save_preset_btn = QPushButton("Save Recoil Preset")
         self.save_preset_btn.clicked.connect(self._save_recoil_preset)
@@ -69,6 +90,15 @@ class RecoilTab(QWidget):
 
         params_group = SectionGroupBox("Recoil Parameters")
         params_layout = QVBoxLayout()
+
+        self.simple_mode_check = QCheckBox("Simple Mode (puxada constante, estilo script G-Hub)")
+        self.simple_mode_check.setChecked(False)
+        self.simple_mode_check.stateChanged.connect(self._on_config_change)
+        params_layout.addWidget(self.simple_mode_check)
+
+        self.simple_rate_slider = LabeledSlider("Pull Rate (px / 7ms)", 0, 20, 4)
+        self.simple_rate_slider.value_changed.connect(self._on_config_change)
+        params_layout.addWidget(self.simple_rate_slider)
 
         self.strength_slider = LabeledSlider("Strength", 0, 100, 65)
         self.strength_slider.value_changed.connect(self._on_config_change)
@@ -94,6 +124,14 @@ class RecoilTab(QWidget):
         self.curve_selector.preset_changed.connect(self._on_config_change)
         params_layout.addWidget(self.curve_selector)
 
+        self.initial_kick_slider = LabeledDoubleSlider("Initial Kick (1.0 = off, 2.0 = dobro no 1º tiro)", 1.0, 2.0, 1.0, decimals=2)
+        self.initial_kick_slider.value_changed.connect(self._on_config_change)
+        params_layout.addWidget(self.initial_kick_slider)
+
+        self.initial_kick_ticks_slider = LabeledSlider("Initial Kick Ticks", 1, 30, 6)
+        self.initial_kick_ticks_slider.value_changed.connect(self._on_config_change)
+        params_layout.addWidget(self.initial_kick_ticks_slider)
+
         params_group.layout().addLayout(params_layout)
         self.layout().addWidget(params_group)
 
@@ -104,6 +142,15 @@ class RecoilTab(QWidget):
         self.y_gate_check.setChecked(True)
         self.y_gate_check.stateChanged.connect(self._on_config_change)
         adv_layout.addWidget(self.y_gate_check)
+
+        self.headshot_assist_check = QCheckBox("Headshot Assist (puxa pra cima no hipfire, estilo Zen)")
+        self.headshot_assist_check.setChecked(False)
+        self.headshot_assist_check.stateChanged.connect(self._on_config_change)
+        adv_layout.addWidget(self.headshot_assist_check)
+
+        self.headshot_assist_slider = LabeledSlider("Headshot Assist Pull", 0, 3000, 700)
+        self.headshot_assist_slider.value_changed.connect(self._on_config_change)
+        adv_layout.addWidget(self.headshot_assist_slider)
 
         self.curve_widget = ResponseCurveWidget()
         adv_layout.addWidget(self.curve_widget)
@@ -158,6 +205,13 @@ class RecoilTab(QWidget):
             "return_speed": self.return_speed_selector.currentPreset(),
             "curve": self.curve_selector.currentPreset(),
             "y_gate": self.y_gate_check.isChecked(),
+            "loadout_slots": ["Pickaxe"] + [c.currentText() for c in self.loadout_combos],
+            "simple_mode": self.simple_mode_check.isChecked(),
+            "simple_rate": self.simple_rate_slider.value(),
+            "initial_kick_mult": self.initial_kick_slider.value(),
+            "initial_kick_ticks": self.initial_kick_ticks_slider.value(),
+            "headshot_assist": self.headshot_assist_check.isChecked(),
+            "headshot_assist_pull": self.headshot_assist_slider.value(),
         }
 
     def set_config(self, config: Dict[str, Any]) -> None:
@@ -178,6 +232,14 @@ class RecoilTab(QWidget):
                     self.category_combo.blockSignals(False)
                     self._on_category_changed(cat)
             self.weapon_selector.setPreset(c["weapon"])
+        slots = c.get("loadout_slots") or c.get("recoil_loadout_slots")
+        if isinstance(slots, (list, tuple)) and len(slots) >= 6:
+            for i, combo in enumerate(self.loadout_combos):
+                idx = combo.findText(slots[i + 1])
+                if idx >= 0:
+                    combo.blockSignals(True)
+                    combo.setCurrentIndex(idx)
+                    combo.blockSignals(False)
         for json_key, slider_attr in [
             ("recoil_strength", "strength_slider"), ("strength", "strength_slider"),
             ("recoil_x_strength", "x_strength_slider"), ("x_strength", "x_strength_slider"),
@@ -190,9 +252,23 @@ class RecoilTab(QWidget):
         for json_key, check_attr in [
             ("recoil_enabled", "enable_check"),
             ("recoil_y_gate", "y_gate_check"), ("y_gate", "y_gate_check"),
+            ("recoil_simple_mode", "simple_mode_check"), ("simple_mode", "simple_mode_check"),
+            ("recoil_headshot_assist", "headshot_assist_check"), ("headshot_assist", "headshot_assist_check"),
         ]:
             if json_key in c and hasattr(self, check_attr):
                 getattr(self, check_attr).setChecked(bool(c[json_key]))
+        for json_key, slider_attr in [
+            ("recoil_simple_rate", "simple_rate_slider"), ("simple_rate", "simple_rate_slider"),
+            ("recoil_initial_kick_ticks", "initial_kick_ticks_slider"), ("initial_kick_ticks", "initial_kick_ticks_slider"),
+            ("recoil_headshot_assist_pull", "headshot_assist_slider"), ("headshot_assist_pull", "headshot_assist_slider"),
+        ]:
+            if json_key in c and hasattr(self, slider_attr):
+                getattr(self, slider_attr).setValue(int(c[json_key]))
+        for json_key, slider_attr in [
+            ("recoil_initial_kick_mult", "initial_kick_slider"), ("initial_kick_mult", "initial_kick_slider"),
+        ]:
+            if json_key in c and hasattr(self, slider_attr):
+                getattr(self, slider_attr).setValue(float(c[json_key]))
         for json_key, sel_attr, label_func in [
             ("recoil_return_speed", "return_speed_selector", "_return_speed_label"),
             ("return_speed", "return_speed_selector", "_return_speed_label"),

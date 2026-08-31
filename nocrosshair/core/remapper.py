@@ -9,23 +9,26 @@ DEFAULT_KBD_BINDINGS: Dict[str, str] = {
     "KEY_S": "ABS_Y_MAX",
     "KEY_A": "ABS_X_MIN",
     "KEY_D": "ABS_X_MAX",
-    "KEY_SPACE": "BTN_A",          # Pular -> X
+    # Botões de face: o pipeline usa a convenção XBOX (letra) — BTN_X =
+    # recarregar (Quadrado), BTN_Y = picareta (Triângulo). O jogo lê o pad
+    # por índice na ordem padrão, então esses códigos batem direto.
+    "KEY_SPACE": "BTN_A",          # Pular -> A do Xbox (Cruz)
+    # Shift é o botão de correr: L3/left stick press.
+    # C continua sendo agachar: R3/right stick press.
     "KEY_LEFTSHIFT": "BTN_THUMBL", # Correr -> Click analógico esquerdo (L3)
     "KEY_C": "BTN_THUMBR",         # Agachar -> Click analógico direito (R3)
-    "KEY_R": "BTN_X",              # Recarregar -> Quadrado
-    "KEY_E": "BTN_X",              # Coletar -> Quadrado
-    "KEY_Q": "BTN_B",              # Granada de impulso -> Bolinha
-    "KEY_F": "BTN_Y",              # Picareta / última arma -> Triângulo
+    "KEY_R": "BTN_X",              # Recarregar -> X do Xbox (Quadrado)
+    "KEY_E": "BTN_X",              # Coletar -> X do Xbox (Quadrado)
+    "KEY_Q": "BTN_B",              # Granada de impulso -> B do Xbox (Círculo)
+    "KEY_F": "BTN_Y",              # Picareta / última arma -> Y do Xbox (Triângulo)
     "BTN_RIGHT": "ABS_Z",          # Mirar (Botão direito do mouse) -> L2
     "BTN_LEFT": "ABS_RZ",          # Atirar (Botão esquerdo do mouse) -> R2
     "KEY_TAB": "ABS_HAT0Y_MIN",    # Abrir inventário -> D-Pad para cima
     "KEY_M": "BTN_SELECT",         # Abrir mapa -> Select / Share
     "KEY_B": "ABS_HAT0Y_MAX",      # Agradecer motorista/Emoji -> D-Pad para baixo
-    "KEY_1": "BTN_TR",             # Troca de armas
-    "KEY_2": "BTN_TR",
-    "KEY_3": "BTN_TR",
-    "KEY_4": "BTN_TR",
-    "KEY_5": "BTN_TR",
+    # KEY_1..5 NÃO são remapeados de propósito: o jogo roda em KBM e as teclas
+    # 1-5 selecionam o slot direto. Se fossem mapeados pra RB (ciclar), o jogo
+    # receberia a tecla E o RB e o slot ia pra frente demais.
 }
 
 ACTION_MAP: Dict[str, int] = {
@@ -130,9 +133,9 @@ class InputRemapper:
         target_rx = norm_x * 32767.0
         target_ry = norm_y * 32767.0
 
-        if abs(target_rx) < 40:
+        if abs(target_rx) < 20:
             target_rx = 0.0
-        if abs(target_ry) < 40:
+        if abs(target_ry) < 20:
             target_ry = 0.0
 
         # Filtro passa-baixa suave para suavizar micro-tremores na mira do mouse
@@ -140,9 +143,9 @@ class InputRemapper:
         self.smooth_rx = self.smooth_rx * (1.0 - weight) + target_rx * weight
         self.smooth_ry = self.smooth_ry * (1.0 - weight) + target_ry * weight
 
-        if abs(self.smooth_rx) < 40:
+        if abs(self.smooth_rx) < 20:
             self.smooth_rx = 0.0
-        if abs(self.smooth_ry) < 40:
+        if abs(self.smooth_ry) < 20:
             self.smooth_ry = 0.0
 
         return max(-32767.0, min(32767.0, self.smooth_rx)), \

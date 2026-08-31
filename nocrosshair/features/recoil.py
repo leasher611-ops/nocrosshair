@@ -1,11 +1,19 @@
 import math
 import time
+import unicodedata
 from typing import Dict, Any, Tuple, Optional, List
 from dataclasses import dataclass, field
 from collections import deque
 
-from nocrosshair.core.config import RecoilConfig, RECOIL_PRESETS
+from nocrosshair.core.config import RecoilConfig, RECOIL_PRESETS, WEAPON_ALIASES
 from nocrosshair.features.physics import apply_recoil_curve_factor
+
+
+def normalize_weapon_name(name: str) -> str:
+    """Normaliza nome de arma: caixa baixa, sem acentos, espaços colapsados."""
+    nfkd = unicodedata.normalize("NFKD", name)
+    plain = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return " ".join(plain.lower().split())
 
 
 @dataclass
@@ -55,6 +63,10 @@ class RecoilPattern:
 
 
 DEFAULT_PATTERNS: Dict[str, RecoilPattern] = {}
+
+# Escala do Simple Mode: 1 "px" (MoveMouseRelative) = 90 unidades do stick,
+# o mesmo escalonamento do strength do engine (1 strength = 90/tick).
+SIMPLE_UNITS_PER_PX = 90
 
 def _generate_default_patterns():
     for name, preset in RECOIL_PRESETS.items():
@@ -215,15 +227,19 @@ class SmartLearnEngine:
 
 class RecoilEngine:
     EMA_FACTOR = 0.35
+    MAX_MULT_BOOST = 2.5
 
     def __init__(self, config=None):
         self.active_preset: str = "M416"
         self.custom_presets: Dict[str, Dict[str, Any]] = {}
         self.config = config or RecoilConfig()
+        self.runtime = None
         self.state = AntiRecoilState()
         self._weapon: str = "M416"
         self._pattern: Optional[RecoilPattern] = DEFAULT_PATTERNS.get("M416")
         self._custom_patterns: Dict[str, RecoilPattern] = {}
+        self._active_delay_ms: float = float(self.config.delay_ms)
+        self._active_return_speed: float = float(self.config.return_speed)
         self._sm_active_pattern = None
         self._sm_current_tick = 0
         self._sm_total_ticks = 60
@@ -286,10 +302,39 @@ class RecoilEngine:
 
     def set_weapon(self, weapon_name: str) -> None:
         self._weapon = weapon_name
-        self._pattern = (
+        normalized = normalize_weapon_name(weapon_name)
+        canonical = WEAPON_ALIASES.get(normalized, "")
+        pattern = (
             self._custom_patterns.get(weapon_name) or
-            DEFAULT_PATTERNS.get(weapon_name)
+            DEFAULT_PATTERNS.get(weapon_name) or
+            DEFAULT_PATTERNS.get(normalized.upper()) or
+            DEFAULT_PATTERNS.get(canonical)
         )
+        if pattern is not None and canonical:
+            self._weapon = canonical
+        if pattern is None:
+            for preset_name, preset in RECOIL_PRESETS.items():
+                if normalize_weapon_name(preset_name) == normalized:
+                    pattern = DEFAULT_PATTERNS.get(preset_name)
+                    self._weapon = preset_name
+                    break
+        if pattern is None:
+            # Auto Detect por categoria: se o nome não é um preset exato,
+            # resolve para o primeiro preset da mesma categoria (AR, SMG...).
+            category = weapon_name.upper()
+            for name, preset in RECOIL_PRESETS.items():
+                if preset.get("category", "").upper() == category:
+                    pattern = DEFAULT_PATTERNS.get(name)
+                    self._weapon = name
+                    break
+        self._pattern = pattern
+        # Perfil por arma: delay e return vêm do preset da arma quando existem
+        preset = RECOIL_PRESETS.get(self._weapon, {})
+        self._active_delay_ms = float(preset.get("delay_ms", self.config.delay_ms))
+        self._active_return_speed = float(preset.get("return_speed", self.config.return_speed))
+
+    def update_runtime(self, runtime) -> None:
+        self.runtime = runtime
 
     def add_custom_pattern(self, pattern: RecoilPattern) -> None:
         self._custom_patterns[pattern.name] = pattern
@@ -305,28 +350,104 @@ class RecoilEngine:
     def process(self, tick: int, is_shooting: bool, is_aiming: bool,
                 is_moving: bool, ry_raw: int, rx_raw: int,
                 delta_ms: float, bloom_compensation: bool = True) -> Tuple[int, int]:
-        if not self.config.enabled or not is_shooting:
+        if not self.config.enabled:
+            return 0, 0
+
+        # ── Simple Mode (estilo script LUA do Logitech G-Hub) ──
+        # Pull plano e constante: MoveMouseRelative(0, rate) a cada 7ms
+        # enquanto atira. Sem curva, sem pattern, sem EMA — do primeiro tiro.
+        if self.config.simple_mode:
             self._adapt.reset()
-            self.state.ema_y *= 0.7
-            self.state.ema_x *= 0.7
+            if not is_shooting:
+                self.state.ema_y = 0
+                self.state.ema_x = 0
+                self.state.active = False
+                return 0, 0
+            if not self.state.active:
+                self.state.active = True
+                self.state.tick = 0
+            self.state.tick = tick
+            pull = self.config.simple_rate * SIMPLE_UNITS_PER_PX * (delta_ms / 7.0)
+            y_out = max(-18000, min(18000, int(pull)))
+            if self.config.headshot_assist and not is_aiming:
+                y_out = max(-18000, y_out - self.config.headshot_assist_pull)
+            return y_out, 0
+
+        if not is_shooting:
+            # ── Return (estilo Zen) ──
+            # Ao soltar o gatilho o retículo "volta" progressivamente:
+            # o EMA decai com a return_speed do preset da arma em vez do
+            # 0.7 fixo — assim o engajamento seguinte começa de onde o
+            # retículo naturalmente assentou, sem salto.
+            self._adapt.reset()
+            rs = self._active_return_speed
+            self.state.ema_y *= rs
+            self.state.ema_x *= rs
             if abs(self.state.ema_y) < 50:
                 self.state.ema_y = 0
             if abs(self.state.ema_x) < 50:
                 self.state.ema_x = 0
             self.state.active = False
+            self.state.burst_count = 0
             return int(self.state.ema_y), int(self.state.ema_x)
 
         if not self.state.active:
             self.state.active = True
             self.state.tick = 0
             self.state.spray_start = time.monotonic()
+            self.state.burst_count = 0
+
+        # ── Delay do primeiro tiro (perfil da arma) ──
+        # Armas com first-shot kick alto esperam o tiro "assentar" antes de
+        # começar a puxar. O preset da arma define (ex.: SPIRE RIFLE 60ms).
+        # Híbrido tick + wall-clock: no jogo vale o tempo real; nos testes o
+        # tick (determinístico) desbloqueia mesmo sem relógio avançar.
+        if self._active_delay_ms > 0:
+            spray_elapsed_ms = (time.monotonic() - self.state.spray_start) * 1000.0
+            delay_ticks = max(1, int(self._active_delay_ms / 16.67))
+            if tick < delay_ticks and spray_elapsed_ms < self._active_delay_ms:
+                return int(self.state.ema_y), int(self.state.ema_x)
+
+        # ── Burst Mode (rajada com reset) ──
+        # Aplica pull apenas em janelas de rajada e pausa entre elas: simula
+        # o tap-fire (o recoil do jogo reseta na pausa e a 1ª bala de cada
+        # rajada sai com spread mínimo). Ideal pra AR em média distância.
+        runtime = self.runtime
+        burst_mode = bool(runtime.burst_mode) if runtime else False
+        if burst_mode:
+            burst_count = int(runtime.burst_count) if runtime else 3
+            off_ticks = max(1, int((runtime.burst_delay_ms if runtime else 50) / 16.67))
+            phase = self.state.burst_count % max(1, burst_count + off_ticks)
+            self.state.burst_count += 1
+            if phase >= burst_count:
+                # Pausa da rajada: pull ZERO — o recoil do jogo reseta na pausa
+                self.state.ema_y = 0
+                self.state.ema_x = 0
+                return 0, 0
 
         if self._pattern:
             raw_y, raw_x = self._pattern.get_offset_at_tick(tick)
         else:
             progress = tick / max(self.config.ticks, 1)
-            raw_y = int(self.config.strength * 90 * (1.0 - progress * 0.3))
+            factor = apply_recoil_curve_factor(tick, self.config.ticks, self.config.curve)
+            raw_y = int(self.config.strength * 90 * factor)
             raw_x = int(self.config.x_strength * 90 * math.sin(progress * math.pi))
+
+        # ── Teto de boost (predictabilidade) ──
+        # Todos os multiplicadores abaixo (kick, bloom, hipfire, adapt,
+        # smart_learn) juntos não podem passar de MAX_MULT_BOOST sobre o
+        # valor base do padrão — senão o pull vira imprevisível de tunar.
+        base_y, base_x = raw_y, raw_x
+
+        # ── Initial Kick (estilo Titan Two) ──
+        # Muitas armas têm "first shot kick" forte: nos primeiros ticks de
+        # spray aplicamos um multiplicador extra que decai linearmente até
+        # 1.0. Default 1.0 = sem efeito (comportamento original).
+        if self.config.initial_kick_mult != 1.0:
+            kick_progress = min(1.0, tick / max(self.config.initial_kick_ticks, 1))
+            kick_mult = self.config.initial_kick_mult - (self.config.initial_kick_mult - 1.0) * kick_progress
+            raw_y = int(raw_y * kick_mult)
+            raw_x = int(raw_x * kick_mult)
 
         # ── Bloom compensation (AUREN+ style) ──
         # Extra pull while strafing; ramps during sustained spray; weaker under ADS.
@@ -365,11 +486,40 @@ class RecoilEngine:
                 raw_y = int(raw_y * sl_v)
                 raw_x = int(raw_x * sl_h)
 
-        self.state.ema_y = self.state.ema_y * self.EMA_FACTOR + raw_y * (1.0 - self.EMA_FACTOR)
-        self.state.ema_x = self.state.ema_x * self.EMA_FACTOR + raw_x * (1.0 - self.EMA_FACTOR)
+        def _cap(raw: int, base: int) -> int:
+            if base == 0:
+                return raw
+            limit = abs(int(base * self.MAX_MULT_BOOST))
+            return max(-limit, min(limit, raw))
+
+        raw_y = _cap(raw_y, base_y)
+        raw_x = _cap(raw_x, base_x)
+
+        # ── Smoothing (suavização configurável) ──
+        # 0 = fator padrão (0.35); acima disso suaviza progressivamente até
+        # 0.80 (pull mais lento e "redondo"). O caminho do Sniper ainda pode
+        # forçar EMA_FACTOR = 0.15 no class attr.
+        ema_factor = self.EMA_FACTOR
+        if runtime and runtime.smoothing > 0:
+            ema_factor = min(0.80, self.EMA_FACTOR + (runtime.smoothing / 100.0) * 0.45)
+
+        self.state.ema_y = self.state.ema_y * ema_factor + raw_y * (1.0 - ema_factor)
+        self.state.ema_x = self.state.ema_x * ema_factor + raw_x * (1.0 - ema_factor)
 
         y_out = max(-18000, min(18000, int(self.state.ema_y)))
         x_out = max(-18000, min(18000, int(self.state.ema_x)))
+
+        # ── Horizontal Pull (viés lateral constante, ex.: compensar drift) ──
+        if runtime and runtime.horizontal_pull:
+            x_out = max(-18000, min(18000, x_out + int(runtime.horizontal_pull)))
+
+        # ── Headshot Assist (estilo Zen) ──
+        # Anti-recoil "negativo" no hipfire: em vez de puxar para baixo
+        # (compensar o climb), injeta um micro-adjust para CIMA a cada tiro
+        # para o retículo assentar na altura da cabeça. No ADS quem cuida
+        # disso é o Head Lock do aim assist.
+        if self.config.headshot_assist and not is_aiming:
+            y_out = max(-18000, y_out - self.config.headshot_assist_pull)
 
         return y_out, x_out
 
@@ -433,6 +583,12 @@ class RecoilTestbed:
 
     def apply_config(self, config: Dict[str, Any]) -> None:
         weapon = config.get("weapon", "AR").upper()
+        if weapon not in RECOIL_PRESETS:
+            # Resolve categoria ("AR", "SMG", "Shotgun"...) para o preset real
+            for name, preset in RECOIL_PRESETS.items():
+                if preset.get("category", "").upper() == weapon:
+                    weapon = name
+                    break
         self.recoil_engine.set_preset(weapon)
         self.recoil_engine.set_custom_presets({
             weapon: self._preset_from_config(config)

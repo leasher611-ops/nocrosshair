@@ -1,0 +1,26 @@
+{
+    "controller_id": "dualsense_edge",
+    "polling_rate_hz": 1000,
+    "trigger_mode": "analog",
+    "trigger_stop_position": null,
+    "rapid_trigger": false,
+    "joystick_response_curve": "linear",
+    "rgb_color": [0, 0, 255],
+    "rgb_effect": "static",
+    "rgb_brightness": 64,
+    "gyro_enabled": true,
+    "gyro_sensitivity": 0.8,
+    "gyro_aim_mode": "relative",
+    "motion_controls": true,
+    "touchpad_enabled": true,
+    "back_paddles_enabled": true,
+    "calibration": {
+        "ls_center_x": 0,
+        "ls_center_y": 0,
+        "rs_center_x": 0,
+        "rs_center_y": 0,
+        "gyro_offset_x": 0,
+        "gyro_offset_y": 0,
+        "gyro_offset_z": 0
+    }
+}

@@ -265,6 +265,7 @@ class ControllerV4Tab(QWidget):
             "cyclone_2": "xbox360",
             "ds4": "dualshock4",
             "dualsense_edge": "dualsense_edge",
+            "dualsense": "dualsense",
             "xbox360": "xbox360",
         }
         return _VIRTUAL_MAP.get(hw_id, "xbox360")

@@ -183,7 +183,7 @@ class MainWindow(QMainWindow):
 
         toolbar.addWidget(QLabel(" Tipo: "))
         self.ctrl_type_label = QLabel("xbox360")
-        self.ctrl_type_label.setStyleSheet("color: #00ff88; font-weight: bold;")
+        self.ctrl_type_label.setStyleSheet("color: #00E5FF; font-weight: 600;")
         self.ctrl_type_label.setMinimumWidth(80)
         toolbar.addWidget(self.ctrl_type_label)
 
@@ -232,6 +232,7 @@ class MainWindow(QMainWindow):
 
         self.profile_badge = QLabel("  [ NO PROFILE ]")
         self.profile_badge.setObjectName("profileBadge")
+        self.profile_badge.setStyleSheet("background-color: rgba(25, 38, 60, 0.85);")
         toolbar.addWidget(self.profile_badge)
 
         toolbar.addSeparator()
@@ -308,6 +309,7 @@ class MainWindow(QMainWindow):
             "cyclone_2": "xbox360",
             "ds4": "dualshock4",
             "dualsense_edge": "dualsense_edge",
+            "dualsense": "dualsense",
             "xbox360": "xbox360",
         }
         self.ctrl_type_label.setText(type_map.get(hw_id, "xbox360"))
@@ -426,7 +428,7 @@ class MainWindow(QMainWindow):
                     self.mouse_combo.setCurrentIndex(i)
                     break
         if cfg.controller_type and hasattr(self, 'controller_v4_tab'):
-            hw_map = {"xbox360": "xbox360", "dualshock4": "ds4", "dualsense_edge": "dualsense_edge", "xboxone": "xbox360"}
+            hw_map = {"xbox360": "xbox360", "dualshock4": "ds4", "dualsense_edge": "dualsense_edge", "dualsense": "dualsense", "xboxone": "xbox360"}
             hw_id = hw_map.get(cfg.controller_type, "xbox360")
             idx = self.controller_v4_tab.hw_combo.findData(hw_id)
             if idx >= 0:
@@ -441,6 +443,18 @@ class MainWindow(QMainWindow):
             self.remapping_tab.set_config(flat)
         if hasattr(self, 'aa_tab') and hasattr(self.aa_tab, 'set_config'):
             self.aa_tab.set_config(flat)
+        if hasattr(self, 'aa_tab') and hasattr(self.aa_tab, 'set_rapid_fire_config'):
+            from nocrosshair.core.config import RapidFireConfig
+            self.aa_tab.set_rapid_fire_config(RapidFireConfig.from_dict(flat))
+        if hasattr(self, 'aa_tab') and hasattr(self.aa_tab, 'set_bloom_reducer_config'):
+            from nocrosshair.core.config import BloomReducerConfig
+            self.aa_tab.set_bloom_reducer_config(BloomReducerConfig.from_dict(flat))
+        if hasattr(self, 'aa_tab') and hasattr(self.aa_tab, 'set_movement_tech_config'):
+            from nocrosshair.core.config import MovementTechConfig
+            self.aa_tab.set_movement_tech_config(MovementTechConfig.from_dict(flat))
+        if hasattr(self, 'aa_tab') and hasattr(self.aa_tab, 'set_crouch_aim_config'):
+            from nocrosshair.core.config import CrouchAimConfig
+            self.aa_tab.set_crouch_aim_config(CrouchAimConfig.from_dict(flat))
         if hasattr(self, 'recoil_tab') and hasattr(self.recoil_tab, 'set_config'):
             self.recoil_tab.set_config(flat)
         if hasattr(self, 'physics_tab') and hasattr(self.physics_tab, 'set_config'):
@@ -547,6 +561,7 @@ class MainWindow(QMainWindow):
         from nocrosshair.core.config import (
             AppConfig, AdvancedStickPhysicsConfig, TriggerPhysicsConfig,
             AimAssistConfig, RecoilConfig, SniperZoomConfig,
+            RecoilRuntimeConfig,
         )
         physics = self.physics_tab.get_config()
         cal = self.calibration_tab.get_config()
@@ -559,6 +574,10 @@ class MainWindow(QMainWindow):
         aa = self.aa_tab.get_aim_assist_config()
         recoil_cfg = self.recoil_tab.get_config()
         remap = self.remapping_tab.get_config()
+        rapid_fire_cfg = self.aa_tab.get_rapid_fire_config()
+        bloom_reducer_cfg = self.aa_tab.get_bloom_reducer_config()
+        movement_tech_cfg = self.aa_tab.get_movement_tech_config()
+        crouch_aim_cfg = self.aa_tab.get_crouch_aim_config()
 
         kbd_path = self.kbd_combo.currentData() or ""
         mouse_path = self.mouse_combo.currentData() or ""
@@ -572,13 +591,17 @@ class MainWindow(QMainWindow):
         mouse_min_output = remap.get("mouse_min_output", 0.08)
         square_stick = remap.get("square_stick", True)
 
-        return AppConfig(
+        cfg = AppConfig(
             controller_type=ctrl_type,
             ls_physics=AdvancedStickPhysicsConfig.from_dict(physics, "ls_"),
             rs_physics=AdvancedStickPhysicsConfig.from_dict(physics, "rs_"),
             lt_physics=TriggerPhysicsConfig.from_dict(physics, "lt_"),
             rt_physics=TriggerPhysicsConfig.from_dict(physics, "rt_"),
             aim_assist=aa,
+            rapid_fire=rapid_fire_cfg,
+            bloom_reducer=bloom_reducer_cfg,
+            movement_tech=movement_tech_cfg,
+            crouch_aim=crouch_aim_cfg,
             recoil=RecoilConfig.from_dict(recoil_cfg),
             remap_kbd_path=kbd_path,
             remap_mouse_path=mouse_path,
@@ -619,6 +642,10 @@ class MainWindow(QMainWindow):
                 fixed_y=int(remap.get("sniper_zoom_fixed_y", 540)),
             ),
         )
+        cfg.recoil_runtime.loadout_slots = list(recoil_cfg.get(
+            "loadout_slots", RecoilRuntimeConfig.DEFAULT_LOADOUT_SLOTS,
+        ))
+        return cfg
 
     def _poll_runtime_status(self) -> None:
         status = self.runtime.get_status()

@@ -114,6 +114,30 @@ class StickPhysicsEngine:
             return init_spd + (1.0 - init_spd) * (scaled_mag ** max(0.1, accel * 0.7))
         elif curve == "precise":
             return scaled_mag ** (0.5 * accel) if scaled_mag < 0.5 else 0.5 + 0.5 * ((scaled_mag - 0.5) / 0.5) ** accel
+        elif curve == "dynamic":
+            # Curva dinâmica: suave no centro, rápida nas bordas
+            # Similar ao "Dynamic" do Fortnite/CoD
+            if scaled_mag < 0.3:
+                return scaled_mag ** (1.8 * accel)
+            elif scaled_mag < 0.7:
+                return 0.3 ** (1.8 * accel) + (scaled_mag - 0.3) * (0.7 - 0.3 ** (1.8 * accel)) / 0.4
+            else:
+                return 0.3 ** (1.8 * accel) + 0.4 + (scaled_mag - 0.7) ** (0.5 / accel) * 0.3
+        elif curve == "smooth":
+            # Curva suave: resposta proporcional com easing nas bordas
+            # Mais fluido que linear, menos agressivo que dynamic
+            return scaled_mag ** (1.0 / max(0.5, accel))
+        elif curve == "fluid":
+            # Curva fluida:combinação de smooth + anti-stick
+            # Suave no centro, responsivo no meio, estabilizado nas bordas
+            if scaled_mag < 0.15:
+                return scaled_mag * 0.6  # Centro muito suave
+            elif scaled_mag < 0.5:
+                return 0.09 + (scaled_mag - 0.15) * 1.8  # Transição responsiva
+            elif scaled_mag < 0.85:
+                return 0.09 + 0.63 + (scaled_mag - 0.5) * 1.0  # Meio linear
+            else:
+                return 0.09 + 0.63 + 0.35 + (scaled_mag - 0.85) * 0.33  # Bordas estabilizadas
         else:
             return init_spd + (1.0 - init_spd) * (scaled_mag ** accel)
 

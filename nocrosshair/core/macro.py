@@ -3,7 +3,7 @@
 import time
 import json
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from dataclasses import dataclass, asdict
 from enum import Enum
 
@@ -43,6 +43,7 @@ class Macro:
     timing: List[int]
     repeat: bool = False
     repeat_count: int = 1
+    speed: float = 1.0
 
     def __post_init__(self):
         if self.actions is None:
@@ -58,6 +59,7 @@ class Macro:
             "timing": self.timing,
             "repeat": self.repeat,
             "repeat_count": self.repeat_count,
+            "speed": self.speed,
         }
 
     @staticmethod
@@ -70,6 +72,7 @@ class Macro:
             timing=d.get("timing", []),
             repeat=d.get("repeat", False),
             repeat_count=d.get("repeat_count", 1),
+            speed=float(d.get("speed", 1.0)),
         )
 
 class MacroRecorder:
@@ -165,11 +168,13 @@ class MacroPlayer:
         self._current_index += 1
 
     def get_delay(self) -> int:
-        if not self._current_macro or self._current_index == 0:
+        if not self._current_macro:
             return 0
 
         if self._current_index < len(self._current_macro.timing):
-            return self._current_macro.timing[self._current_index]
+            speed = max(0.1, self._current_macro.speed)
+            delay = int(self._current_macro.timing[self._current_index] / speed)
+            return max(1, delay)
 
         return 0
 
@@ -182,12 +187,20 @@ class MacroManager:
         self._macros: Dict[str, Macro] = {}
         self._recorder = MacroRecorder()
         self._player = MacroPlayer()
+        self._trigger_capture_macro: Optional[str] = None
+        self._trigger_capture_listeners: List[Callable[[str, str], None]] = []
 
     def get_macro_names(self) -> List[str]:
         return list(self._macros.keys())
 
     def get_macro(self, name: str) -> Optional[Macro]:
         return self._macros.get(name)
+
+    def get_macro_by_trigger(self, trigger: str) -> Optional[Macro]:
+        for macro in self._macros.values():
+            if macro.trigger == trigger:
+                return macro
+        return None
 
     def add_macro(self, macro: Macro) -> None:
         self._macros[macro.name] = macro
@@ -207,11 +220,53 @@ class MacroManager:
             self._macros[macro.name] = macro
         return macro
 
+    def start_trigger_capture(self, macro_name: str) -> bool:
+        if macro_name not in self._macros:
+            return False
+        self._trigger_capture_macro = macro_name
+        return True
+
+    def stop_trigger_capture(self) -> None:
+        self._trigger_capture_macro = None
+
+    def get_trigger_capture_macro(self) -> Optional[str]:
+        return self._trigger_capture_macro
+
+    def is_trigger_capturing(self) -> bool:
+        return self._trigger_capture_macro is not None
+
+    def set_capture_trigger(self, trigger: str) -> bool:
+        if not self._trigger_capture_macro:
+            return False
+        macro = self._macros.get(self._trigger_capture_macro)
+        if not macro:
+            return False
+        macro.trigger = trigger
+        self._trigger_capture_macro = None
+        self.save_to_file()
+        for callback in self._trigger_capture_listeners:
+            callback(macro.name, trigger)
+        return True
+
+    def register_trigger_capture_listener(self, callback: Callable[[str, str], None]) -> None:
+        self._trigger_capture_listeners.append(callback)
+
     def play_macro(self, macro: Macro) -> None:
         self._player.play(macro)
 
+    def play_macro_by_trigger(self, trigger: str) -> bool:
+        macro = self.get_macro_by_trigger(trigger)
+        if not macro:
+            return False
+        self.play_macro(macro)
+        return True
+
     def stop_playback(self) -> None:
         self._player.stop()
+
+    def record_action(self, action_type: MacroActionType, target: str) -> None:
+        if self._recorder.is_recording():
+            self._recorder.record_action(action_type, target)
 
     def is_recording(self) -> bool:
         return self._recorder.is_recording()

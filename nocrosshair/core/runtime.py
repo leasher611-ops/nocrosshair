@@ -35,6 +35,7 @@ class RuntimeManager:
         self._device_path: Optional[str] = None
         self._controller: Optional[VirtualController] = None
         self._input_loop: Optional[InputLoop] = None
+        self._controller = None
         self._running = False
         self._last_error: str = ""
         self._game_detector = game_profile_manager.detector

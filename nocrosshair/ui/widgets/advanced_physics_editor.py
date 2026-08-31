@@ -22,8 +22,7 @@ class AdvancedPhysicsEditor(QWidget):
         layout = QVBoxLayout(self)
 
         title = QLabel("Advanced Physics Configuration")
-        title.setFont(QFont("monospace", 10, QFont.Weight.Bold))
-        title.setStyleSheet("color: #00ff88")
+        title.setObjectName("hudTitle")
         layout.addWidget(title)
 
         layout.addWidget(HLine())

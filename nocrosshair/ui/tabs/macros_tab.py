@@ -2,7 +2,7 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QListWidget, QListWidgetItem, QSplitter, QTableWidget,
-    QTableWidgetItem, QHeaderView, QLineEdit, QMessageBox, QFrame,
+    QTableWidgetItem, QHeaderView, QLineEdit, QSpinBox, QMessageBox, QFrame,
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 
@@ -18,6 +18,7 @@ class MacrosTab(QWidget):
         self._recording_macro_name: Optional[str] = None
         self.setLayout(QVBoxLayout())
         self._init_ui()
+        macro_manager.register_trigger_capture_listener(self._on_trigger_captured)
         self._load_macros()
 
     def _init_ui(self) -> None:
@@ -56,11 +57,26 @@ class MacrosTab(QWidget):
         trigger_label = QLabel("Trigger Key:")
         trigger_label.setMinimumWidth(80)
         self.trigger_input = QLineEdit()
-        self.trigger_input.setPlaceholderText("Ex: F5, Ctrl+F1")
+        self.trigger_input.setPlaceholderText("Ex: KEY_F5, BTN_Y")
         self.trigger_input.editingFinished.connect(self._on_trigger_changed)
+        self.btn_capture_trigger = QPushButton("Capturar Trigger")
+        self.btn_capture_trigger.clicked.connect(self._on_capture_trigger)
         trigger_layout.addWidget(trigger_label)
         trigger_layout.addWidget(self.trigger_input)
+        trigger_layout.addWidget(self.btn_capture_trigger)
         left_layout.addLayout(trigger_layout)
+
+        speed_layout = QHBoxLayout()
+        speed_label = QLabel("Velocidade:")
+        speed_label.setMinimumWidth(80)
+        self.speed_input = QSpinBox()
+        self.speed_input.setRange(1, 500)
+        self.speed_input.setValue(100)
+        self.speed_input.setSuffix(" %")
+        self.speed_input.valueChanged.connect(self._on_speed_changed)
+        speed_layout.addWidget(speed_label)
+        speed_layout.addWidget(self.speed_input)
+        left_layout.addLayout(speed_layout)
 
         left_layout.addStretch()
 
@@ -173,10 +189,16 @@ class MacrosTab(QWidget):
         macro = macro_manager.get_macro(name)
         if macro:
             self.trigger_input.setText(macro.trigger)
+            self.speed_input.setValue(int(macro.speed * 100))
             self._populate_action_table(macro)
-            status = f"{len(macro.actions)} ações"
             if macro_manager.is_recording():
                 status = "Gravando..."
+            elif macro_manager.get_trigger_capture_macro() == name:
+                status = "Pressione a tecla/botão para capturar trigger..."
+                self.btn_capture_trigger.setEnabled(False)
+            else:
+                status = f"{len(macro.actions)} ações"
+                self.btn_capture_trigger.setEnabled(True)
             self.status_label.setText(status)
 
     def _on_trigger_changed(self) -> None:
@@ -187,6 +209,35 @@ class MacrosTab(QWidget):
         macro = macro_manager.get_macro(name)
         if macro:
             macro.trigger = self.trigger_input.text()
+            macro_manager.save_to_file()
+
+    def _on_capture_trigger(self) -> None:
+        item = self.macro_list.currentItem()
+        if not item:
+            return
+        name = item.text()
+        if macro_manager.start_trigger_capture(name):
+            self.status_label.setText("Pressione a tecla/botão para capturar trigger...")
+            self.btn_capture_trigger.setEnabled(False)
+
+    def _on_trigger_captured(self, macro_name: str, trigger: str) -> None:
+        current = self.macro_list.currentItem()
+        if current and current.text() == macro_name:
+            self.trigger_input.setText(trigger)
+            self.status_label.setText(f"Trigger capturado: {trigger}")
+            self.btn_capture_trigger.setEnabled(True)
+        else:
+            self.status_label.setText(f"Trigger capturado para '{macro_name}': {trigger}")
+            self.btn_capture_trigger.setEnabled(True)
+
+    def _on_speed_changed(self) -> None:
+        item = self.macro_list.currentItem()
+        if not item:
+            return
+        name = item.text()
+        macro = macro_manager.get_macro(name)
+        if macro:
+            macro.speed = self.speed_input.value() / 100.0
             macro_manager.save_to_file()
 
     def _populate_action_table(self, macro: Optional[Macro]) -> None:
