@@ -339,7 +339,7 @@ class SilentAimQTEngine:
         #   nível 1  → 5 GPC  = 5%  = 1638 evdev
         #   nível 5  → 10 GPC = 10% = 3277 evdev
         #   nível 10 → 20 GPC = 20% = 6553 evdev
-        gpc_amp = 5.0 + intensity * 3.0   # 8 (nível 1) a 35 (nível 10) — escala real GPC
+        gpc_amp = 10.0 + intensity * 3.0   # 13 (nível 1) a 40 (nível 10) — community standard 30 GPC
         amplitude = 327.67 * gpc_amp      # evdev
         # Velocidade angular do círculo (GPC speed 1-10x)
         speed = 2.0 + intensity * 1.0
@@ -361,12 +361,10 @@ class SilentAimQTEngine:
             gate_low = 6000.0
             gate_high = 25000.0
         else:
-            # Silent Aim: gate BAIXO — a oscilação só age em micro-ajuste
-            # (parado). Qualquer movimento real do mouse desliga rápido,
-            # senão o tracking vira "pixel jump" (oscilação briga com o
-            # movimento do jogador ao seguir o alvo).
-            gate_low = 1500.0    # abaixo: oscilação cheia (quase parado)
-            gate_high = 6000.0   # acima: sem oscilação (movendo)
+            # Silent Aim: gate MAIOR — mouse "respira" com 2000-4000 evdev
+            # gate_low precisa absorver os micro-tremores humanos
+            gate_low = 5000.0    # abaixo: oscilação cheia (absorve tremores)
+            gate_high = 12000.0  # acima: sem oscilação (movendo forte)
         if mag_in <= gate_low:
             gate = 1.0
         elif mag_in >= gate_high:
@@ -523,10 +521,10 @@ class SilentAimQTEngine:
         if self._gate_l_smooth < 0.02:
             return lx, ly
 
-        # Amplitude do left stick: usa a intensidade do Silent Hit (menor)
-        # para não atrapalhar a movimentação — 4-10% do stick.
+        # Amplitude do left stick: precisa de 15-20 GPC pra ativar rotational AA.
+        # 4-10 GPC (antigo) era ABAIXO da deadzone do jogo (5% = ~1638 evdev).
         intensity = self.hit_intensity
-        gpc_amp = 4.0 + intensity * 0.6   # 4 (nível 1) a 10 (nível 10)
+        gpc_amp = 12.0 + intensity * 2.5   # 14 (nível 1) a 37 (nível 10) — rotational AA
         amp = 327.67 * gpc_amp * self._gate_l_smooth
 
         # Oscilação quadrada alternada X↔Y (como os silent aims)

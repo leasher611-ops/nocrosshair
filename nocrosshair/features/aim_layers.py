@@ -442,7 +442,7 @@ class StickyLayer(AimLayer):
         self.strength: float = 0.25
         self.magnetic_pull: int = 300
         self.min_input: int = 100
-        self.persist_ms: float = 90.0
+        self.persist_ms: float = 200.0     # 200ms = padrão Zen (era 90ms — curto)
 
         self._persist_rx: float = 0.0
         self._persist_ry: float = 0.0

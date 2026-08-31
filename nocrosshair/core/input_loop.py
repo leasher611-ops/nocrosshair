@@ -1722,15 +1722,8 @@ class InputLoop:
             # Só escreve se o silent_qt está ativo em algum modo
             from nocrosshair.features.silent_aim_qt import SilentMode
             if qt.get_mode() != SilentMode.NONE:
-                # ── Smoothing do right stick (anti pixel-jump) ──
-                # O mouse é delta com min_output que "pula" o stick. Um EMA
-                # no output suaviza os micro-saltos verticais/horizontais
-                # sem atrasar o tracking (alpha alto = responsivo).
-                alpha = 0.55
-                self._qt_out_rx = self._qt_out_rx * (1.0 - alpha) + out_x * alpha
-                self._qt_out_ry = self._qt_out_ry * (1.0 - alpha) + out_y * alpha
-                out_x = self._qt_out_rx
-                out_y = self._qt_out_ry
+                # Smoothing REMOVIDO — já existe no silent_aim_qt.py
+                # O EMA duplo comia a amplitude (1300 evdev < deadzone 1638)
                 self.controller.write_axis(e.ABS_RX, int(round(out_x)))
                 self.controller.write_axis(e.ABS_RY, int(round(out_y)))
 
@@ -1761,7 +1754,7 @@ class InputLoop:
 
             # Sincroniza aim_lock_silent layer (Layer 2 — ADS)
             al.aim_lock_silent.enabled = self.config.aim_assist.silent_aim_enabled
-            al.aim_lock_silent.gpc_amp = 5.0 + self.config.aim_assist.silent_aim_intensity * 3.0
+            al.aim_lock_silent.gpc_amp = 10.0 + self.config.aim_assist.silent_aim_intensity * 3.0
             al.aim_lock_silent.lock_enabled = self.config.aim_assist.lock_enabled
             al.aim_lock_silent.lock_fov = self.config.aim_assist.lock_fov
             al.aim_lock_silent.lock_strength = self.config.aim_assist.lock_strength / 18000.0
@@ -1769,7 +1762,7 @@ class InputLoop:
 
             # Sincroniza camera_hit layer (Layer 3 — hip fire)
             al.camera_hit.enabled = self.config.aim_assist.silent_hit_enabled
-            al.camera_hit.gpc_amp = 5.0 + self.config.aim_assist.silent_hit_intensity * 3.0
+            al.camera_hit.gpc_amp = 10.0 + self.config.aim_assist.silent_hit_intensity * 3.0
 
             # Sincroniza track layer
             al.track_snap.track_enabled = self.config.aim_assist.auto_track_enabled
