@@ -1,8 +1,8 @@
-# Prompt pra Kimi AI
+
 
 ---
 
-Olá Kimi! Preciso da sua ajuda com um projeto de aim assist pra Fortnite. Vou descrever tudo em detalhes.
+Olá gemini Preciso da sua ajuda com um projeto de aim assist pra Fortnite. Vou descrever tudo em detalhes.
 
 ## O que é o projeto
 

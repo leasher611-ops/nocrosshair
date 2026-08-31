@@ -733,6 +733,11 @@ class RecoilConfig:
     # pós-tiro que mantém o retículo na altura da cabeça, estilo Zen).
     headshot_assist: bool = False
     headshot_assist_pull: int = 700
+    # ── Zen-style toggle + intensity cycling ──
+    recoil_toggle_key: str = "KEY_RIGHTCTRL"
+    recoil_up_key: str = "KEY_PAGEUP"
+    recoil_down_key: str = "KEY_PAGEDOWN"
+    recoil_level: int = 3          # 1-10, padrão = 3 (30 GPC)
 
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "RecoilConfig":
@@ -753,7 +758,23 @@ class RecoilConfig:
             initial_kick_ticks=int(d.get("recoil_initial_kick_ticks", 6)),
             headshot_assist=d.get("recoil_headshot_assist", False),
             headshot_assist_pull=int(d.get("recoil_headshot_assist_pull", 700)),
+            recoil_level=int(d.get("recoil_level", 3)),
         )
+
+# Perfis de amplitude estilo Zen: GPC lookup table
+# Cada nível mapeia para amplitudes crescentes (right stick)
+RECOIL_AMPLITUDE_PROFILES = {
+    1: 15.0,   # Leve — quase invisível, ativa AA
+    2: 22.0,   # Médio-baixo
+    3: 30.0,   # Padrão comunidade
+    4: 38.0,   # Forte
+    5: 45.0,   # Ultra — tremor claro
+    6: 55.0,   # God mode
+    7: 70.0,   # Insano
+    8: 85.0,   # Extremo
+    9: 100.0,  # Máximo-1
+    10: 120.0, # Máximo absoluto
+}
 
 @dataclass
 class RecoilRuntimeConfig:
@@ -889,9 +910,21 @@ class AimAssistConfig:
     sticky_magnet_enabled: bool = True
     sticky_magnet_strength: float = 0.25
     sticky_magnet_pull: int = 300
-    aim_spam_enabled: bool = False
-    aim_spam_interval_ms: int = 180
+    aim_spam_enabled: bool = True     # Ativo por padrão (re-ativa AA)
+    aim_spam_interval_ms: int = 100   # 100ms ciclo rápido
     aim_spam_hold_ms: int = 40
+    # ── Rotational Boost (left stick micro-oscillation) ──
+    rotational_boost_enabled: bool = True
+    rotational_boost_amplitude: float = 15.0   # GPC
+    rotational_boost_ads_boost: float = 1.3
+    # ── Aim Friction (reduz sensibilidade perto do alvo) ──
+    friction_enabled: bool = True
+    friction_zone: float = 8000.0     # evdev — dentro dessa zona, aplica fricção
+    friction_strength: float = 0.6    # 0.6 = 60% da velocidade normal
+    # ── Magnetic Pull Directional (pull na direção do movimento) ──
+    magnetic_pull_dir_enabled: bool = True
+    magnetic_pull_dir_strength: float = 0.15
+    magnetic_pull_dir_decay_ms: float = 150.0
     enhanced_enabled: bool = False
     micro_adjust_pull: int = 500
     head_assist_enabled: bool = False

@@ -819,6 +819,8 @@ class InputLoop:
         self._mouse_dy: int = 0
         self._last_rx: float = 0.0
         self._last_ry: float = 0.0
+        self._final_lx: float = 0.0
+        self._final_ly: float = 0.0
         self._last_mouse_time: float = 0.0
         self._has_received_event: bool = False
         self._aa_rx: float = 0.0
@@ -1067,6 +1069,8 @@ class InputLoop:
         self._mouse_dy = 0
         self._last_rx = 0.0
         self._last_ry = 0.0
+        self._final_lx = 0.0
+        self._final_ly = 0.0
         self._last_mouse_time = time.monotonic()
 
         try:
@@ -1386,6 +1390,29 @@ class InputLoop:
                 self.pipeline.update_config(self.config)
                 self.status_message = f"Silent Aim/Hit {'ON' if aa.silent_aim_enabled else 'OFF'}"
                 print(f"[SilentAimQT] {'ON' if aa.silent_aim_enabled else 'OFF'}")
+            if code_str == "KEY_RIGHTCTRL":
+                # Toggle Anti-Recoil ON/OFF
+                rc = self.config.recoil
+                rc.enabled = not rc.enabled
+                self.anti_recoil_engine.update_config(rc)
+                self.status_message = f"Anti-Recoil {'ON' if rc.enabled else 'OFF'}"
+                print(f"[AntiRecoil] {'ON' if rc.enabled else 'OFF'}")
+            if code_str == "KEY_PAGEUP":
+                # Aumenta nível de recoil (1-10, wrap)
+                rc = self.config.recoil
+                rc.recoil_level = (rc.recoil_level % 10) + 1
+                rc.strength = rc.recoil_level * 10
+                self.anti_recoil_engine.update_config(rc)
+                self.status_message = f"Recoil Level: {rc.recoil_level} (strength={rc.strength})"
+                print(f"[AntiRecoil] Level {rc.recoil_level}")
+            if code_str == "KEY_PAGEDOWN":
+                # Diminui nível de recoil (1-10, wrap)
+                rc = self.config.recoil
+                rc.recoil_level = ((rc.recoil_level - 2) % 10) + 1
+                rc.strength = rc.recoil_level * 10
+                self.anti_recoil_engine.update_config(rc)
+                self.status_message = f"Recoil Level: {rc.recoil_level} (strength={rc.strength})"
+                print(f"[AntiRecoil] Level {rc.recoil_level}")
             if code_str == "KEY_INSERT":
                 # Aumenta intensidade MANUALMENTE (modo que estiver ativo)
                 qt = self.pipeline.aa_pipeline.silent_qt
@@ -1667,6 +1694,10 @@ class InputLoop:
         self.controller.write_axis(e.ABS_X, lx)
         self.controller.write_axis(e.ABS_Y, ly)
 
+        # Armazena left stick para uso do rotational boost
+        self._final_lx = lx
+        self._final_ly = ly
+
         # ── Silent Aim / Silent Hit QT — oscilação CONTÍNUA no right stick ──
         # O Cronus Zen escreve o stick a ~50Hz MESMO com o jogador parado.
         # O right stick só era atualizado no movimento do mouse — com o
@@ -1753,8 +1784,10 @@ class InputLoop:
             al.slowdown.ads_multiplier = self.config.aim_assist.ads_multiplier
 
             # Sincroniza aim_lock_silent layer (Layer 2 — ADS)
+            from nocrosshair.core.config import RECOIL_AMPLITUDE_PROFILES
             al.aim_lock_silent.enabled = self.config.aim_assist.silent_aim_enabled
-            al.aim_lock_silent.gpc_amp = 10.0 + self.config.aim_assist.silent_aim_intensity * 3.0
+            al.aim_lock_silent.gpc_amp = RECOIL_AMPLITUDE_PROFILES.get(
+                self.config.aim_assist.silent_aim_intensity, 30.0)
             al.aim_lock_silent.lock_enabled = self.config.aim_assist.lock_enabled
             al.aim_lock_silent.lock_fov = self.config.aim_assist.lock_fov
             al.aim_lock_silent.lock_strength = self.config.aim_assist.lock_strength / 18000.0
@@ -1762,7 +1795,8 @@ class InputLoop:
 
             # Sincroniza camera_hit layer (Layer 3 — hip fire)
             al.camera_hit.enabled = self.config.aim_assist.silent_hit_enabled
-            al.camera_hit.gpc_amp = 10.0 + self.config.aim_assist.silent_hit_intensity * 3.0
+            al.camera_hit.gpc_amp = RECOIL_AMPLITUDE_PROFILES.get(
+                self.config.aim_assist.silent_hit_intensity, 30.0)
 
             # Sincroniza track layer
             al.track_snap.track_enabled = self.config.aim_assist.auto_track_enabled
@@ -1775,11 +1809,32 @@ class InputLoop:
             al.sticky.strength = self.config.aim_assist.sticky_magnet_strength
             al.sticky.magnetic_pull = self.config.aim_assist.sticky_magnet_pull
 
+            # Sincroniza friction layer
+            al.friction.enabled = self.config.aim_assist.friction_enabled
+            al.friction.friction_zone = self.config.aim_assist.friction_zone
+            al.friction.friction_strength = self.config.aim_assist.friction_strength
+
+            # Sincroniza magnetic pull layer
+            al.magnetic_pull.enabled = self.config.aim_assist.magnetic_pull_dir_enabled
+            al.magnetic_pull.pull_strength = self.config.aim_assist.magnetic_pull_dir_strength
+            al.magnetic_pull.decay_ms = self.config.aim_assist.magnetic_pull_dir_decay_ms
+
+            # Sincroniza rotational boost layer
+            al.rotational_boost.enabled = self.config.aim_assist.rotational_boost_enabled
+            al.rotational_boost.base_amplitude = self.config.aim_assist.rotational_boost_amplitude
+            al.rotational_boost.ads_boost = self.config.aim_assist.rotational_boost_ads_boost
+
             layer_rx, layer_ry = al.process(ctx.raw_rx, ctx.raw_ry, ctx)
 
-            # Escreve o output das layers
+            # Escreve o output das layers (right stick)
             self.controller.write_axis(e.ABS_RX, int(round(layer_rx)))
             self.controller.write_axis(e.ABS_RY, int(round(layer_ry)))
+
+            # Aplica rotational boost no left stick
+            lx_out, ly_out = al.rotational_boost.apply_left_stick(
+                float(self._final_lx), float(self._final_ly), ctx)
+            self.controller.write_axis(e.ABS_X, int(round(lx_out)))
+            self.controller.write_axis(e.ABS_Y, int(round(ly_out)))
 
         lt, rt = self.remap_pipeline.get_trigger_values()
 

@@ -335,11 +335,9 @@ class SilentAimQTEngine:
         #   Sahr03 v2:        amplitude ±8  GPC (=±2621 evdev), delay 16ms
         #   Full_Accessability: ±5 GPC (=±1638 evdev), delay 16ms
         #   MikeCrowne GPC:   intensity 10-100% somado ao input
-        # GPC usa escala 0-100 (0-100% do stick). Nosso nível 1-10:
-        #   nível 1  → 5 GPC  = 5%  = 1638 evdev
-        #   nível 5  → 10 GPC = 10% = 3277 evdev
-        #   nível 10 → 20 GPC = 20% = 6553 evdev
-        gpc_amp = 10.0 + intensity * 3.0   # 13 (nível 1) a 40 (nível 10) — community standard 30 GPC
+        # GPC usa escala 0-100 (0-100% do stick). Lookup table:
+        from nocrosshair.core.config import RECOIL_AMPLITUDE_PROFILES
+        gpc_amp = RECOIL_AMPLITUDE_PROFILES.get(intensity, 30.0)
         amplitude = 327.67 * gpc_amp      # evdev
         # Velocidade angular do círculo (GPC speed 1-10x)
         speed = 2.0 + intensity * 1.0
@@ -521,10 +519,10 @@ class SilentAimQTEngine:
         if self._gate_l_smooth < 0.02:
             return lx, ly
 
-        # Amplitude do left stick: precisa de 15-20 GPC pra ativar rotational AA.
-        # 4-10 GPC (antigo) era ABAIXO da deadzone do jogo (5% = ~1638 evdev).
+        # Amplitude do left stick: 50% da do right stick (rotational AA)
         intensity = self.hit_intensity
-        gpc_amp = 12.0 + intensity * 2.5   # 14 (nível 1) a 37 (nível 10) — rotational AA
+        from nocrosshair.core.config import RECOIL_AMPLITUDE_PROFILES
+        gpc_amp = RECOIL_AMPLITUDE_PROFILES.get(intensity, 30.0) * 0.5
         amp = 327.67 * gpc_amp * self._gate_l_smooth
 
         # Oscilação quadrada alternada X↔Y (como os silent aims)

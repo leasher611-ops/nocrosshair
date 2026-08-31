@@ -25,6 +25,9 @@ class LayerID(Enum):
     CAMERA_HIT = "camera_hit"
     TRACK = "track"
     STICKY = "sticky"
+    ROTATIONAL_BOOST = "rotational_boost"
+    FRICTION = "friction"
+    MAGNETIC_PULL = "magnetic_pull"
 
 
 class AimLayer:
@@ -498,32 +501,202 @@ class StickyLayer(AimLayer):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Layer 6: Rotational Boost (left stick micro-oscillation)
+# ═══════════════════════════════════════════════════════════════════════
+
+class RotationalBoostLayer(AimLayer):
+    """Micro-oscilação no left stick para manter rotational AA ativo.
+
+    O Fortnite só ativa rotational AA com left stick em movimento.
+    Esta layer injeta micro-strafe que o jogo interpreta como movimento
+    do jogador, mantendo o rotational ativo mesmo quando parado.
+    """
+
+    layer_id = LayerID.ROTATIONAL_BOOST
+
+    def __init__(self):
+        super().__init__()
+        self._ls_phase = 0        # 0=X, 1=Y
+        self._ls_timer = 0.0
+        self._ls_toggle_ms = 25.0  # alterna eixo a cada 25ms
+        self._ls_dir = 1.0
+        # Config
+        self.base_amplitude = 15.0   # GPC padrão
+        self.ads_boost = 1.3         # multiplicador em ADS
+
+    def process(self, rx: float, ry: float, ctx: "LayerContext") -> Tuple[float, float]:
+        # Esta layer NÃO modifica rx/ry — opera no left stick
+        return rx, ry
+
+    def apply_left_stick(self, lx: float, ly: float, ctx: "LayerContext") -> Tuple[float, float]:
+        """Aplica micro-oscilação no left stick."""
+        if not self.enabled:
+            return lx, ly
+
+        # Amplitude em evdev
+        amp_gpc = self.base_amplitude
+        if ctx.is_aiming:
+            amp_gpc *= self.ads_boost
+        amp = 327.67 * amp_gpc
+
+        # Gate: só ativa quando jogador parado ou movendo leve
+        mag = math.hypot(lx, ly)
+        if mag > 20000:  # correndo forte — não interfere
+            return lx, ly
+
+        if mag < 3000:
+            factor = 1.0
+        else:
+            factor = max(0.3, 1.0 - (mag / 25000.0))
+        amp *= factor
+
+        # Timer
+        self._ls_timer += ctx.delta_ms
+        if self._ls_timer >= self._ls_toggle_ms:
+            self._ls_timer = 0.0
+            self._ls_phase = 1 - self._ls_phase
+            self._ls_dir = -self._ls_dir
+
+        # Aplica
+        if self._ls_phase == 0:
+            lx_out = lx + self._ls_dir * amp
+            ly_out = ly
+        else:
+            lx_out = lx
+            ly_out = ly + self._ls_dir * amp * 0.6
+
+        return lx_out, ly_out
+
+    def reset(self):
+        super().reset()
+        self._ls_phase = 0
+        self._ls_timer = 0.0
+        self._ls_dir = 1.0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Layer 7: Aim Friction (reduz sensibilidade perto do alvo)
+# ═══════════════════════════════════════════════════════════════════════
+
+class FrictionLayer(AimLayer):
+    """Reduz sensibilidade quando stick está em micro-ajuste.
+
+    Quando o stick está perto do centro (< 8000 evdev), reduz a velocidade
+    para dar mais controle. Simula a "fricção" que o AA nativo aplica quando
+    o retículo está perto do alvo.
+    """
+
+    layer_id = LayerID.FRICTION
+
+    def __init__(self):
+        super().__init__()
+        self.friction_zone = 8000.0     # evdev — dentro dessa zona, aplica fricção
+        self.friction_strength = 0.6    # 0.6 = 60% da velocidade normal
+
+    def process(self, rx: float, ry: float, ctx: "LayerContext") -> Tuple[float, float]:
+        if not self.enabled:
+            return rx, ry
+
+        mag = math.hypot(rx, ry)
+
+        if mag < self.friction_zone:
+            # Dentro da zona — reduz velocidade
+            factor = 1.0 - (1.0 - self.friction_strength) * (1.0 - mag / self.friction_zone)
+            factor = max(0.3, factor)
+            return rx * factor, ry * factor
+
+        return rx, ry
+
+    def reset(self):
+        super().reset()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Layer 8: Magnetic Pull Directional (pull na direção do movimento)
+# ═══════════════════════════════════════════════════════════════════════
+
+class MagneticPullLayer(AimLayer):
+    """Pull magnético na direção do último movimento do stick.
+
+    Quando o jogador move a mira para a direita, injeta um pull extra
+    naquela direção por um curto período. Diferente do StickyLayer que
+    é radial, este é direcional.
+    """
+
+    layer_id = LayerID.MAGNETIC_PULL
+
+    def __init__(self):
+        super().__init__()
+        self.pull_strength = 0.15    # 15% do movimento
+        self.decay_ms = 150.0        # pull dura 150ms
+        self.last_dir_x = 0.0
+        self.last_dir_y = 0.0
+        self.decay_timer = 0.0
+        self.min_input = 100.0       # threshold mínimo
+
+    def process(self, rx: float, ry: float, ctx: "LayerContext") -> Tuple[float, float]:
+        if not self.enabled:
+            return rx, ry
+
+        # Detecta direção do movimento
+        if abs(rx) > self.min_input or abs(ry) > self.min_input:
+            self.last_dir_x = math.copysign(1.0, rx) if rx != 0 else 0
+            self.last_dir_y = math.copysign(1.0, ry) if ry != 0 else 0
+            self.decay_timer = self.decay_ms
+
+        # Aplica pull enquanto houver decay
+        if self.decay_timer > 0:
+            self.decay_timer -= ctx.delta_ms
+            factor = max(0.0, self.decay_timer / self.decay_ms)
+            pull_x = self.last_dir_x * 500.0 * self.pull_strength * factor
+            pull_y = self.last_dir_y * 500.0 * self.pull_strength * factor
+            return rx + pull_x, ry + pull_y
+
+        return rx, ry
+
+    def reset(self):
+        super().reset()
+        self.last_dir_x = 0.0
+        self.last_dir_y = 0.0
+        self.decay_timer = 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Pipeline de Camadas
 # ═══════════════════════════════════════════════════════════════════════
 
 class AimLayerPipeline:
-    """Pipeline que roda as 5 camadas em sequência.
+    """Pipeline que roda as 8 camadas em sequência.
 
-    1: Slowdown       → reduz velocidade perto do alvo
-    2: AimLock+Silent → trava + oscila (só ADS)
-    3: CameraHit      → oscilação hip fire (só atirando sem mirar)
-    4: Track/Snap     → momentum + headshot
-    5: Sticky         → persistência ao parar
+    1: Friction        → reduz sensibilidade perto do alvo
+    2: Slowdown        → reduz velocidade perto do alvo
+    3: AimLock+Silent  → trava + oscila (só ADS)
+    4: CameraHit       → oscilação hip fire (só atirando sem mirar)
+    5: Track/Snap      → momentum + headshot
+    6: MagneticPull    → pull direcional na direção do movimento
+    7: Sticky          → persistência ao parar
+    8: RotationalBoost → micro-oscilação no left stick
     """
 
     def __init__(self):
+        self.friction = FrictionLayer()
         self.slowdown = SlowdownLayer()
         self.aim_lock_silent = AimLockSilentLayer()
         self.camera_hit = CameraHitLayer()
         self.track_snap = TrackSnapLayer()
+        self.magnetic_pull = MagneticPullLayer()
         self.sticky = StickyLayer()
+        self.rotational_boost = RotationalBoostLayer()
 
         self._layers: list[AimLayer] = [
+            self.friction,
             self.slowdown,
             self.aim_lock_silent,
             self.camera_hit,
             self.track_snap,
+            self.magnetic_pull,
             self.sticky,
+            self.rotational_boost,
         ]
 
     def process(self, rx: float, ry: float, ctx: LayerContext) -> Tuple[float, float]:
